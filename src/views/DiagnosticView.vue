@@ -182,6 +182,11 @@ const errorTypeLabel: Record<ErrorSnapshot['type'], string> = {
   unknown: '❓ Unknown',
 }
 
+const browserToPrivateOk = computed(() => {
+  if (!result.value) return null
+  return !!result.value.response?.status && !result.value.error
+})
+
 function formatJson(val: unknown): string {
   try {
     return JSON.stringify(val, null, 2)
@@ -261,6 +266,46 @@ function formatHeaders(headers: Record<string, string>): string {
             </tr>
           </tbody>
         </table>
+      </section>
+
+      <section class="diag-card">
+        <h2 class="diag-card__title">🧭 Network Path</h2>
+        <div class="network-path">
+          <div class="network-node">
+            <div class="network-node__title">Browser (tu PC)</div>
+            <div class="network-node__subtitle">Cliente web</div>
+          </div>
+
+          <div class="network-link">
+            <span
+              class="network-state"
+              :class="{
+                'network-state--ok': browserToPrivateOk === true,
+                'network-state--bad': browserToPrivateOk === false,
+              }"
+            >
+              {{ browserToPrivateOk === true ? '✅' : browserToPrivateOk === false ? '❌' : '•' }}
+            </span>
+            <span class="network-arrow">↓</span>
+            <span class="network-label">acceso desde Internet al host privado</span>
+          </div>
+
+          <div class="network-node network-node--private">
+            <div class="network-node__title">10.1.1.115 (private)</div>
+            <div class="network-node__subtitle">VPC / red privada</div>
+          </div>
+
+          <div class="network-link">
+            <span class="network-state network-state--ok">✅</span>
+            <span class="network-arrow">↑</span>
+            <span class="network-label">comunicación interna esperada</span>
+          </div>
+
+          <div class="network-node">
+            <div class="network-node__title">EC2 Vue server</div>
+            <div class="network-node__subtitle">Origen recomendado para private IP</div>
+          </div>
+        </div>
       </section>
 
       <!-- ── 1. Request ─────────────────────────────────────────────────── -->
@@ -538,5 +583,67 @@ pre {
   padding: 1rem;
   color: #3fb950;
   font-size: 0.9rem;
+}
+
+.network-path {
+  padding: 1rem;
+  display: grid;
+  gap: 0.45rem;
+  justify-items: center;
+}
+
+.network-node {
+  width: min(520px, 100%);
+  border: 1px solid #30363d;
+  background: #0d1117;
+  border-radius: 8px;
+  padding: 0.65rem 0.8rem;
+  text-align: center;
+}
+
+.network-node--private {
+  border-color: #1f6feb;
+  box-shadow: inset 0 0 0 1px #0c2d6b;
+}
+
+.network-node__title {
+  font-size: 0.92rem;
+  color: #e6edf3;
+  font-weight: 600;
+}
+
+.network-node__subtitle {
+  margin-top: 0.2rem;
+  color: #8b949e;
+  font-size: 0.78rem;
+}
+
+.network-link {
+  display: grid;
+  justify-items: center;
+  color: #8b949e;
+}
+
+.network-state {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.network-state--ok {
+  color: #3fb950;
+}
+
+.network-state--bad {
+  color: #f85149;
+}
+
+.network-arrow {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.network-label {
+  font-size: 0.72rem;
+  text-align: center;
 }
 </style>
