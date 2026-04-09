@@ -23,7 +23,7 @@ interface HomeContent {
 
 const landingData = ref<HomeContent>({})
 
-const API_CONTENT_URL = '/api/content'
+const API_CONTENT_URL = 'http://10.1.1.115/api/content'
 const JSON_FALLBACK_URL = '/json/mock-requets.json'
 
 const fetchContent = async (url: string): Promise<HomeContent> => {
