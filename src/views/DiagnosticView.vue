@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import {
+  API_BASE_URL,
+  API_CONTENT_URL,
+  API_TIMEOUT_MS,
+  getApiHostLabel,
+  isPrivateNetworkHost,
+  toAbsoluteUrl,
+} from '@/config/api'
 
-// Keep in sync with HomeView.vue
-const API_BASE_URL = 'http://10.1.1.115/api/content'
 const FALLBACK_URL = '/json/mock-requets.json'
-const TIMEOUT_MS = 10000
 const APP_VERSION = '0.0.0'
 
 const isDev = import.meta.env.DEV
@@ -76,10 +81,11 @@ async function runDiagnostic() {
   result.value = null
 
   const timestamp = new Date().toISOString()
-  const parsed = new URL(API_BASE_URL)
+  const requestUrl = toAbsoluteUrl(API_CONTENT_URL)
+  const parsed = new URL(requestUrl)
 
   const requestSnapshot: RequestSnapshot = {
-    url: API_BASE_URL,
+    url: requestUrl,
     method: 'GET',
     headers: { Accept: 'application/json' },
     queryParams: Object.fromEntries(parsed.searchParams.entries()),
@@ -89,11 +95,11 @@ async function runDiagnostic() {
   let errorSnapshot: ErrorSnapshot | null = null
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
   const start = performance.now()
 
   try {
-    const response = await fetch(API_BASE_URL, {
+    const response = await fetch(requestUrl, {
       method: 'GET',
       headers: { Accept: 'application/json' },
       signal: controller.signal,
@@ -104,7 +110,9 @@ async function runDiagnostic() {
     let body: unknown = null
     const contentType = response.headers.get('content-type') ?? ''
     try {
-      body = contentType.includes('application/json') ? await response.json() : await response.text()
+      body = contentType.includes('application/json')
+        ? await response.json()
+        : await response.text()
     } catch {
       body = '(could not parse response body)'
     }
@@ -151,7 +159,7 @@ async function runDiagnostic() {
     environment: import.meta.env.MODE,
     appVersion: APP_VERSION,
     apiBaseUrl: API_BASE_URL,
-    timeoutMs: TIMEOUT_MS,
+    timeoutMs: API_TIMEOUT_MS,
     request: requestSnapshot,
     response: responseSnapshot,
     error: errorSnapshot,
@@ -187,6 +195,9 @@ const browserToPrivateOk = computed(() => {
   return !!result.value.response?.status && !result.value.error
 })
 
+const apiHostLabel = computed(() => getApiHostLabel())
+const apiUsesPrivateHost = computed(() => isPrivateNetworkHost())
+
 function formatJson(val: unknown): string {
   try {
     return JSON.stringify(val, null, 2)
@@ -214,7 +225,10 @@ function formatHeaders(headers: Record<string, string>): string {
     <!-- Spinner -->
     <div v-if="running" class="diag-running">
       <span class="spinner" />
-      <span>Probing <code>{{ API_BASE_URL }}</code>…</span>
+      <span
+        >Probing <code>{{ API_CONTENT_URL }}</code
+        >…</span
+      >
     </div>
 
     <template v-if="result && !running">
@@ -225,23 +239,39 @@ function formatHeaders(headers: Record<string, string>): string {
           <tbody>
             <tr>
               <td>App version</td>
-              <td><code>{{ result.appVersion }}</code></td>
+              <td>
+                <code>{{ result.appVersion }}</code>
+              </td>
             </tr>
             <tr>
               <td>Mode</td>
-              <td><code>{{ result.environment }}</code></td>
+              <td>
+                <code>{{ result.environment }}</code>
+              </td>
             </tr>
             <tr>
               <td>API base URL</td>
-              <td><code>{{ result.apiBaseUrl }}</code></td>
+              <td>
+                <code>{{ result.apiBaseUrl }}</code>
+              </td>
+            </tr>
+            <tr>
+              <td>API content URL</td>
+              <td>
+                <code>{{ API_CONTENT_URL }}</code>
+              </td>
             </tr>
             <tr>
               <td>Fallback URL</td>
-              <td><code>{{ FALLBACK_URL }}</code></td>
+              <td>
+                <code>{{ FALLBACK_URL }}</code>
+              </td>
             </tr>
             <tr>
               <td>Configured timeout</td>
-              <td><code>{{ result.timeoutMs }} ms</code></td>
+              <td>
+                <code>{{ result.timeoutMs }} ms</code>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -262,7 +292,9 @@ function formatHeaders(headers: Record<string, string>): string {
             </tr>
             <tr>
               <td>Diagnostic run at</td>
-              <td><code>{{ result.timestamp }}</code></td>
+              <td>
+                <code>{{ result.timestamp }}</code>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -291,8 +323,10 @@ function formatHeaders(headers: Record<string, string>): string {
           </div>
 
           <div class="network-node network-node--private">
-            <div class="network-node__title">10.1.1.115 (private)</div>
-            <div class="network-node__subtitle">VPC / red privada</div>
+            <div class="network-node__title">{{ apiHostLabel }}</div>
+            <div class="network-node__subtitle">
+              {{ apiUsesPrivateHost ? 'Destino privado/no enrutable' : 'Endpoint configurado' }}
+            </div>
           </div>
 
           <div class="network-link">
@@ -303,7 +337,7 @@ function formatHeaders(headers: Record<string, string>): string {
 
           <div class="network-node">
             <div class="network-node__title">EC2 Vue server</div>
-            <div class="network-node__subtitle">Origen recomendado para private IP</div>
+            <div class="network-node__subtitle">Proxy / ALB / backend público recomendado</div>
           </div>
         </div>
       </section>
@@ -315,20 +349,28 @@ function formatHeaders(headers: Record<string, string>): string {
           <tbody>
             <tr>
               <td>URL</td>
-              <td><code>{{ result.request.url }}</code></td>
+              <td>
+                <code>{{ result.request.url }}</code>
+              </td>
             </tr>
             <tr>
               <td>Method</td>
-              <td><code>{{ result.request.method }}</code></td>
+              <td>
+                <code>{{ result.request.method }}</code>
+              </td>
             </tr>
             <tr>
               <td>Headers sent</td>
-              <td><pre>{{ formatHeaders(result.request.headers) }}</pre></td>
+              <td>
+                <pre>{{ formatHeaders(result.request.headers) }}</pre>
+              </td>
             </tr>
             <tr>
               <td>Query params</td>
               <td>
-                <pre v-if="Object.keys(result.request.queryParams).length">{{ formatJson(result.request.queryParams) }}</pre>
+                <pre v-if="Object.keys(result.request.queryParams).length">{{
+                  formatJson(result.request.queryParams)
+                }}</pre>
                 <span v-else class="diag-muted">(none)</span>
               </td>
             </tr>
@@ -362,14 +404,18 @@ function formatHeaders(headers: Record<string, string>): string {
             <tr>
               <td>Response headers</td>
               <td>
-                <pre v-if="result.response && Object.keys(result.response.headers).length">{{ formatHeaders(result.response.headers) }}</pre>
+                <pre v-if="result.response && Object.keys(result.response.headers).length">{{
+                  formatHeaders(result.response.headers)
+                }}</pre>
                 <span v-else class="diag-muted">(none)</span>
               </td>
             </tr>
             <tr>
               <td>Body</td>
               <td>
-                <pre v-if="result.response?.body !== null">{{ formatJson(result.response?.body) }}</pre>
+                <pre v-if="result.response?.body !== null">{{
+                  formatJson(result.response?.body)
+                }}</pre>
                 <span v-else class="diag-muted">(empty)</span>
               </td>
             </tr>
@@ -387,19 +433,27 @@ function formatHeaders(headers: Record<string, string>): string {
           <tbody>
             <tr>
               <td>Error type</td>
-              <td><span class="badge badge--red">{{ errorTypeLabel[result.error.type] }}</span></td>
+              <td>
+                <span class="badge badge--red">{{ errorTypeLabel[result.error.type] }}</span>
+              </td>
             </tr>
             <tr>
               <td>Message</td>
-              <td><code>{{ result.error.message }}</code></td>
+              <td>
+                <code>{{ result.error.message }}</code>
+              </td>
             </tr>
             <tr v-if="result.error.code">
               <td>Code</td>
-              <td><code>{{ result.error.code }}</code></td>
+              <td>
+                <code>{{ result.error.code }}</code>
+              </td>
             </tr>
             <tr v-if="result.error.stack">
               <td>Stack trace <span class="diag-muted">(dev only)</span></td>
-              <td><pre class="diag-stack">{{ result.error.stack }}</pre></td>
+              <td>
+                <pre class="diag-stack">{{ result.error.stack }}</pre>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -475,7 +529,9 @@ function formatHeaders(headers: Record<string, string>): string {
   animation: spin 0.7s linear infinite;
 }
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── Cards ───────────────────────────────────────────────────────────────────── */
@@ -567,11 +623,31 @@ pre {
   letter-spacing: 0.04em;
 }
 
-.badge--green  { background: #0d4429; color: #3fb950; border: 1px solid #238636; }
-.badge--blue   { background: #0c2d6b; color: #58a6ff; border: 1px solid #1f6feb; }
-.badge--orange { background: #341a00; color: #f0883e; border: 1px solid #9e6a03; }
-.badge--red    { background: #490202; color: #f85149; border: 1px solid #da3633; }
-.badge--gray   { background: #21262d; color: #8b949e; border: 1px solid #30363d; }
+.badge--green {
+  background: #0d4429;
+  color: #3fb950;
+  border: 1px solid #238636;
+}
+.badge--blue {
+  background: #0c2d6b;
+  color: #58a6ff;
+  border: 1px solid #1f6feb;
+}
+.badge--orange {
+  background: #341a00;
+  color: #f0883e;
+  border: 1px solid #9e6a03;
+}
+.badge--red {
+  background: #490202;
+  color: #f85149;
+  border: 1px solid #da3633;
+}
+.badge--gray {
+  background: #21262d;
+  color: #8b949e;
+  border: 1px solid #30363d;
+}
 
 /* ── Misc ────────────────────────────────────────────────────────────────────── */
 .diag-muted {

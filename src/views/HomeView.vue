@@ -11,6 +11,7 @@ import TeamSection from '@/components/sections/TeamSection.vue'
 import FeedbackSection from '@/components/sections/FeedbackSection.vue'
 import GallerySection from '@/components/sections/GallerySection.vue'
 import ContactSection from '@/components/sections/ContactSection.vue'
+import { API_CONTENT_URL } from '@/config/api'
 
 interface HomeContent {
   navbar?: Record<string, unknown>
@@ -23,7 +24,6 @@ interface HomeContent {
 
 const landingData = ref<HomeContent>({})
 
-const API_CONTENT_URL = 'http://10.1.1.115/api/content'
 const JSON_FALLBACK_URL = '/json/mock-requets.json'
 
 const fetchContent = async (url: string): Promise<HomeContent> => {
