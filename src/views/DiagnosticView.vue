@@ -4,7 +4,7 @@ import { ref, onMounted, computed } from 'vue'
 // Keep in sync with HomeView.vue
 const API_BASE_URL = 'http://10.1.1.115/api/content'
 const FALLBACK_URL = '/json/mock-requets.json'
-const TIMEOUT_MS = 8000
+const TIMEOUT_MS = 10000
 const APP_VERSION = '0.0.0'
 
 const isDev = import.meta.env.DEV
