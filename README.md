@@ -1,54 +1,91 @@
-# zerotrust-frontend-vue
+## ZeroTrust Frontend Vue
 
-This template should help get you started developing with Vue 3 in Vite.
+Frontend en Vue 3 + Vite con vista de peliculas que consume datos por una ruta puente local (`/bridge`) para no exponer directamente la API privada al cliente.
 
-## Recommended IDE Setup
+## Flujo de red en produccion
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+1. El navegador llama a `/bridge/listar/peliculas?...`.
+2. Apache2 recibe esa ruta y la proxyea a la red privada: `http://10.1.1.115/api/listar/peliculas?...`.
+3. Apache2 devuelve JSON al frontend.
 
-## Recommended Browser Setup
+Si `/bridge` no esta configurado, la SPA fallback devuelve `index.html` y en el navegador aparece:
 
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
+`Unexpected token '<', "<!DOCTYPE ..." is not valid JSON`
 
-## Type Support for `.vue` Imports in TS
+## Build del proyecto
 
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
-
-```sh
+```bash
 npm install
-```
-
-### Compile and Hot-Reload for Development
-
-```sh
-npm run dev
-```
-
-### Type-Check, Compile and Minify for Production
-
-```sh
 npm run build
 ```
 
-### Run Unit Tests with [Vitest](https://vitest.dev/)
+Publicar el contenido de `dist` en:
 
-```sh
-npm run test:unit
+`/var/www/ZeroTrust-Frontend-Vue/dist`
+
+## Apache2 en produccion (HTTPS)
+
+### 1) Habilitar modulos necesarios
+
+```bash
+sudo a2enmod proxy
+sudo a2enmod proxy_http
+sudo a2enmod rewrite
+sudo a2enmod headers
 ```
 
-### Lint with [ESLint](https://eslint.org/)
+### 2) Configurar VirtualHost
 
-```sh
-npm run lint
+Usar este bloque en tu sitio SSL:
+
+```apache
+<IfModule mod_ssl.c>
+		<VirtualHost *:443>
+				ServerName cedrick.click
+				ServerAlias www.cedrick.click
+
+				DocumentRoot /var/www/ZeroTrust-Frontend-Vue/dist
+
+				<Directory /var/www/ZeroTrust-Frontend-Vue/dist>
+						Options Indexes FollowSymLinks
+						AllowOverride None
+						Require all granted
+				</Directory>
+
+				ProxyPreserveHost On
+				RequestHeader set X-Forwarded-Proto "https"
+
+				# API directa (si aun la usas)
+				ProxyPass        /api/     http://10.1.1.115/api/
+				ProxyPassReverse /api/     http://10.1.1.115/api/
+
+				# Puente que usa el frontend
+				ProxyPass        /bridge/  http://10.1.1.115/api/
+				ProxyPassReverse /bridge/  http://10.1.1.115/api/
+
+				RewriteEngine On
+
+				# Evita reescribir llamadas de backend
+				RewriteCond %{REQUEST_URI} !^/api/
+				RewriteCond %{REQUEST_URI} !^/bridge/
+
+				# Evita reescribir archivos estaticos
+				RewriteCond %{REQUEST_URI} !\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|map)$
+
+				# SPA fallback (Vue)
+				RewriteRule ^ /index.html [L]
+
+				Include /etc/letsencrypt/options-ssl-apache.conf
+				SSLCertificateFile /etc/letsencrypt/live/cedrick.click/fullchain.pem
+				SSLCertificateKeyFile /etc/letsencrypt/live/cedrick.click/privkey.pem
+		</VirtualHost>
+</IfModule>
 ```
+
+### 3) Validar y recargar Apache
+
+```bash
+sudo apachectl configtest
+sudo systemctl reload apache2
+```
+
