@@ -19,6 +19,12 @@ export default defineConfig(({ mode }) => {
     server: proxyTarget
       ? {
           proxy: {
+            '/bridge': {
+              target: proxyTarget,
+              changeOrigin: true,
+              // /bridge/listar/peliculas -> /api/listar/peliculas
+              rewrite: (path) => path.replace(/^\/bridge/, '/api'),
+            },
             '/api': {
               target: proxyTarget,
               changeOrigin: true,
