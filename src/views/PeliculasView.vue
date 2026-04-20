@@ -62,6 +62,13 @@ async function load(page = 1) {
 
     if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`)
 
+    const contentType = resp.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) {
+      const bodyPreview = (await resp.text()).slice(0, 200)
+      console.error('[PeliculasView] Non-JSON response preview:', bodyPreview)
+      throw new Error('La ruta puente /bridge no esta devolviendo JSON. Revisa el proxy de Apache en produccion.')
+    }
+
     const json = await resp.json()
     const payload = json?.data
     const items: Pelicula[] = payload?.data ?? []
